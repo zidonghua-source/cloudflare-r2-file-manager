@@ -453,17 +453,17 @@
     <!-- Create Folder Modal -->
     <div id="create-folder-modal" class="modal fixed inset-0 bg-black bg-opacity-50 items-center justify-center z-40">
         <div class="bg-white rounded shadow-xl max-w-md w-full mx-4">
-            <div class="p-4">
+            <form class="p-4" onsubmit="event.preventDefault(); createFolder()">
                 <h2 class="text-lg font-bold mb-3">Create New Folder</h2>
                 <input type="text" id="folder-name-input" placeholder="Folder name"
                     class="w-full border border-gray-300 rounded p-2 mb-3 text-sm">
                 <div class="flex justify-end gap-2">
-                    <button id="create-folder-cancel-btn" onclick="closeCreateFolderModal()"
+                    <button type="button" id="create-folder-cancel-btn" onclick="closeCreateFolderModal()"
                         class="px-3 py-1.5 text-sm text-gray-600 hover:text-gray-800">Cancel</button>
-                    <button id="create-folder-btn" onclick="createFolder()"
+                    <button type="submit" id="create-folder-btn"
                         class="bg-gray-600 hover:bg-gray-700 text-white px-3 py-1.5 rounded text-sm">Create</button>
                 </div>
-            </div>
+            </form>
         </div>
     </div>
 
@@ -738,6 +738,13 @@
             // Sort files alphabetically by name using natural sort
             allFilesList.sort(naturalSort);
 
+            // Keep selection in sync with the files that still exist after a reload.
+            const availableFiles = new Set(allFilesList);
+            selectedFiles.forEach(file => {
+                if (!availableFiles.has(file)) selectedFiles.delete(file);
+            });
+            lastSelectedIndex = -1;
+
             allFilesList.forEach((file, index) => {
                 const fileName = file.split('/').pop();
                 const fileExt = fileName.split('.').pop().toLowerCase();
@@ -791,6 +798,7 @@
                 div.querySelector('span').title = fileName;
                 filesList.appendChild(div);
             });
+            updateSelectionUI();
         }
 
         function handleFileClick(file, index, event) {
@@ -979,8 +987,8 @@
                 showToast(`Failed to delete ${failCount} file(s)`, 'error');
             }
 
-            selectedFiles.clear();
-            loadCurrentFolder();
+            clearSelection();
+            await loadCurrentFolder();
         }
 
         function getFileIcon(ext) {
