@@ -504,10 +504,10 @@
         </div>
     </div>
 
-    <dialog id="file-delete-dialog" aria-labelledby="file-delete-title" aria-describedby="file-delete-message"
+    <dialog id="delete-confirm-dialog" aria-labelledby="delete-confirm-title" aria-describedby="delete-confirm-message"
         class="m-auto w-11/12 max-w-md rounded-lg bg-white p-5 text-gray-900 shadow-xl backdrop:bg-black/50">
-        <h2 id="file-delete-title" class="text-lg font-bold">Confirm deletion</h2>
-        <p id="file-delete-message" class="mt-2 break-words text-sm text-gray-700"></p>
+        <h2 id="delete-confirm-title" class="text-lg font-bold">Confirm deletion</h2>
+        <p id="delete-confirm-message" class="mt-2 break-words text-sm text-gray-700"></p>
         <p class="mt-2 text-xs text-gray-600">Press <kbd>Enter</kbd> to delete or <kbd>Esc</kbd> to cancel.</p>
         <form method="dialog" class="mt-4 flex justify-end gap-2">
             <button type="submit" value="cancel"
@@ -539,25 +539,25 @@
         let selectedFiles = new Set();
         let lastSelectedIndex = -1;
         let allFilesList = []; // Store ordered list of all files
-        const fileDeleteDialog = document.getElementById('file-delete-dialog');
-        let resolveFileDeletion;
+        const deleteConfirmDialog = document.getElementById('delete-confirm-dialog');
+        let resolveDeletion;
 
-        fileDeleteDialog.addEventListener('close', () => {
-            const resolve = resolveFileDeletion;
-            resolveFileDeletion = null;
-            resolve?.(fileDeleteDialog.returnValue === 'delete');
+        deleteConfirmDialog.addEventListener('close', () => {
+            const resolve = resolveDeletion;
+            resolveDeletion = null;
+            resolve?.(deleteConfirmDialog.returnValue === 'delete');
         });
-        fileDeleteDialog.addEventListener('keydown', (event) => {
+        deleteConfirmDialog.addEventListener('keydown', (event) => {
             if (event.key === 'Enter' && event.repeat) event.preventDefault();
         });
 
-        function confirmFileDeletion(message) {
-            if (resolveFileDeletion) return Promise.resolve(false);
-            document.getElementById('file-delete-message').textContent = message;
-            fileDeleteDialog.returnValue = '';
+        function confirmDeletion(message) {
+            if (resolveDeletion) return Promise.resolve(false);
+            document.getElementById('delete-confirm-message').textContent = message;
+            deleteConfirmDialog.returnValue = '';
             return new Promise((resolve) => {
-                resolveFileDeletion = resolve;
-                fileDeleteDialog.showModal();
+                resolveDeletion = resolve;
+                deleteConfirmDialog.showModal();
             });
         }
 
@@ -774,8 +774,8 @@
                         <button type="button" data-folder-action="download" class="action-btn text-gray-600 hover:text-gray-800 hover:bg-gray-50 rounded transition" title="Download folder">
                             <i data-feather="download" aria-hidden="true" class="w-4 h-4"></i>
                         </button>
-                        <button type="button" data-folder-action="delete" class="action-btn text-red-600 hover:text-red-800 hover:bg-red-50 rounded transition" title="Delete">
-                            <i data-feather="trash-2" class="w-4 h-4"></i>
+                        <button type="button" data-folder-action="delete" class="action-btn bg-red-700 hover:bg-red-800 text-white rounded transition" title="Delete">
+                            <i data-feather="trash-2" aria-hidden="true" class="w-4 h-4"></i>
                         </button>
                     </div>
                 `;
@@ -785,7 +785,9 @@
                 div.querySelector('[data-folder-action="open"]').onclick = () => navigateToFolder(folderPath);
                 div.querySelector('[data-folder-action="rename"]').onclick = () => openRenameFolderModal(folderPath);
                 div.querySelector('[data-folder-action="duplicate"]').onclick = () => duplicateFolder(folderPath);
-                div.querySelector('[data-folder-action="delete"]').onclick = () => deleteFolder(folderPath);
+                const deleteButton = div.querySelector('[data-folder-action="delete"]');
+                deleteButton.setAttribute('aria-label', `Delete folder ${folderName}`);
+                deleteButton.onclick = () => deleteFolder(folderPath);
                 const download = div.querySelector('[data-folder-action="download"]');
                 download.setAttribute('aria-label', `Download folder ${folderName}`);
                 download.onclick = () => openFolderDownload(folderPath);
@@ -975,7 +977,7 @@
 
         // Select all files (Ctrl+A)
         document.addEventListener('keydown', (e) => {
-            if (fileDeleteDialog.open || document.getElementById('folder-download-dialog').open) return;
+            if (deleteConfirmDialog.open || document.getElementById('folder-download-dialog').open) return;
             if ((e.ctrlKey || e.metaKey) && e.key === 'a' && !e.target.matches('input, textarea')) {
                 e.preventDefault();
                 selectAllFiles();
@@ -991,7 +993,7 @@
             if (files.length === 0) return;
 
             const label = files.length === 1 ? 'file' : 'files';
-            if (!(await confirmFileDeletion(`Delete ${files.length} selected ${label}?`))) return;
+            if (!(await confirmDeletion(`Delete ${files.length} selected ${label}?`))) return;
 
             // Group files by folder for batch deletion
             const filesByFolder = new Map();
@@ -1825,7 +1827,7 @@
         async function deleteFolder(folder) {
             const folderName = folder.split('/').pop();
 
-            if (!confirm(`Delete folder "${folderName}" and all its contents?`)) return;
+            if (!(await confirmDeletion(`Delete folder "${folderName}" and all its contents?`))) return;
 
             // Find the folder item and disable its buttons
             const targetFolderItem = Array.from(document.querySelectorAll('.folder-item'))
@@ -1836,9 +1838,10 @@
                 buttons.forEach(btn => {
                     btn.disabled = true;
                     if (btn.dataset.folderAction === 'delete') {
-                        btn.innerHTML = '<i data-feather="loader" class="w-4 h-4 animate-spin"></i>';
+                        btn.innerHTML = '<i data-feather="loader" aria-hidden="true" class="w-4 h-4 animate-spin"></i>';
                     }
                 });
+                refreshIcons();
             }
 
             try {
@@ -1867,7 +1870,7 @@
                     buttons.forEach(btn => {
                         btn.disabled = false;
                         if (btn.dataset.folderAction === 'delete') {
-                            btn.innerHTML = '<i data-feather="trash-2" class="w-4 h-4"></i>';
+                            btn.innerHTML = '<i data-feather="trash-2" aria-hidden="true" class="w-4 h-4"></i>';
                         }
                     });
                     refreshIcons();
@@ -1880,7 +1883,7 @@
             const fileName = file.split('/').pop();
             const folder = file.substring(0, file.lastIndexOf('/'));
 
-            if (!(await confirmFileDeletion(`Delete file "${fileName}"?`))) return;
+            if (!(await confirmDeletion(`Delete file "${fileName}"?`))) return;
 
             // Find the file item and disable its buttons
             const fileItems = document.querySelectorAll('.file-item');
