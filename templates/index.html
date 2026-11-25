@@ -285,7 +285,7 @@
                         <i data-feather="upload" class="w-4 h-4 inline mr-1"></i>Upload
                     </button>
                     <button id="delete-selected-btn" onclick="deleteSelectedFiles()"
-                        class="bg-gray-800 hover:bg-gray-900 text-center flex justify-center items-center text-white px-3 py-1.5 rounded text-sm transition hidden">
+                        class="bg-red-700 hover:bg-red-800 text-center flex justify-center items-center text-white px-3 py-1.5 rounded text-sm transition hidden">
                         <i data-feather="trash-2" class="w-4 h-4 inline mr-1"></i>Delete (<span
                             id="selected-count">0</span>)
                     </button>
@@ -504,6 +504,19 @@
         </div>
     </div>
 
+    <dialog id="file-delete-dialog" aria-labelledby="file-delete-title" aria-describedby="file-delete-message"
+        class="m-auto w-11/12 max-w-md rounded-lg bg-white p-5 text-gray-900 shadow-xl backdrop:bg-black/50">
+        <h2 id="file-delete-title" class="text-lg font-bold">Confirm deletion</h2>
+        <p id="file-delete-message" class="mt-2 break-words text-sm text-gray-700"></p>
+        <p class="mt-2 text-xs text-gray-600">Press <kbd>Enter</kbd> to delete or <kbd>Esc</kbd> to cancel.</p>
+        <form method="dialog" class="mt-4 flex justify-end gap-2">
+            <button type="submit" value="cancel"
+                class="rounded px-3 py-2 text-sm text-gray-600 hover:bg-gray-100">Cancel</button>
+            <button type="submit" value="delete" autofocus
+                class="rounded bg-red-700 px-3 py-2 text-sm text-white hover:bg-red-800">Delete</button>
+        </form>
+    </dialog>
+
     <dialog id="folder-download-dialog" aria-labelledby="folder-download-title" aria-describedby="folder-download-summary"
         class="m-auto w-11/12 max-w-md rounded-lg bg-white p-5 text-gray-900 shadow-xl backdrop:bg-black/50">
         <h2 id="folder-download-title" class="text-lg font-bold">Download folder</h2>
@@ -526,6 +539,27 @@
         let selectedFiles = new Set();
         let lastSelectedIndex = -1;
         let allFilesList = []; // Store ordered list of all files
+        const fileDeleteDialog = document.getElementById('file-delete-dialog');
+        let resolveFileDeletion;
+
+        fileDeleteDialog.addEventListener('close', () => {
+            const resolve = resolveFileDeletion;
+            resolveFileDeletion = null;
+            resolve?.(fileDeleteDialog.returnValue === 'delete');
+        });
+        fileDeleteDialog.addEventListener('keydown', (event) => {
+            if (event.key === 'Enter' && event.repeat) event.preventDefault();
+        });
+
+        function confirmFileDeletion(message) {
+            if (resolveFileDeletion) return Promise.resolve(false);
+            document.getElementById('file-delete-message').textContent = message;
+            fileDeleteDialog.returnValue = '';
+            return new Promise((resolve) => {
+                resolveFileDeletion = resolve;
+                fileDeleteDialog.showModal();
+            });
+        }
 
         // Initialize
         document.addEventListener('DOMContentLoaded', () => {
@@ -822,10 +856,10 @@
                            title="Download">
                             <i data-feather="download" aria-hidden="true" class="w-4 h-4"></i>
                         </a>
-                        <button data-file-action="delete"
-                                class="action-btn text-red-600 hover:text-red-800 hover:bg-red-50 rounded transition" 
+                        <button type="button" data-file-action="delete"
+                                class="action-btn bg-red-700 hover:bg-red-800 text-white rounded transition"
                                 title="Delete">
-                            <i data-feather="trash-2" class="w-4 h-4"></i>
+                            <i data-feather="trash-2" aria-hidden="true" class="w-4 h-4"></i>
                         </button>
                     </div>
                 `;
@@ -834,7 +868,9 @@
                 name.title = fileName;
                 div.querySelector('input').onclick = (event) => handleFileClick(file, index, event);
                 div.querySelector('[data-file-action="get-url"]').onclick = () => getFileUrl(file);
-                div.querySelector('[data-file-action="delete"]').onclick = () => deleteFile(file);
+                const deleteButton = div.querySelector('[data-file-action="delete"]');
+                deleteButton.setAttribute('aria-label', `Delete ${fileName}`);
+                deleteButton.onclick = () => deleteFile(file);
 
                 const downloadLink = div.querySelector('a');
                 downloadLink.href = `/download-file?${new URLSearchParams({ key: file })}`;
@@ -939,7 +975,7 @@
 
         // Select all files (Ctrl+A)
         document.addEventListener('keydown', (e) => {
-            if (document.getElementById('folder-download-dialog').open) return;
+            if (fileDeleteDialog.open || document.getElementById('folder-download-dialog').open) return;
             if ((e.ctrlKey || e.metaKey) && e.key === 'a' && !e.target.matches('input, textarea')) {
                 e.preventDefault();
                 selectAllFiles();
@@ -951,14 +987,16 @@
         });
 
         async function deleteSelectedFiles() {
-            if (selectedFiles.size === 0) return;
+            const files = Array.from(selectedFiles);
+            if (files.length === 0) return;
 
-            if (!confirm(`Delete ${selectedFiles.size} selected file(s)?`)) return;
+            const label = files.length === 1 ? 'file' : 'files';
+            if (!(await confirmFileDeletion(`Delete ${files.length} selected ${label}?`))) return;
 
             // Group files by folder for batch deletion
             const filesByFolder = new Map();
 
-            Array.from(selectedFiles).forEach(file => {
+            files.forEach(file => {
                 const fileName = file.split('/').pop();
                 const folder = file.substring(0, file.lastIndexOf('/')) || '';
 
@@ -1842,7 +1880,7 @@
             const fileName = file.split('/').pop();
             const folder = file.substring(0, file.lastIndexOf('/'));
 
-            if (!confirm(`Delete file "${fileName}"?`)) return;
+            if (!(await confirmFileDeletion(`Delete file "${fileName}"?`))) return;
 
             // Find the file item and disable its buttons
             const fileItems = document.querySelectorAll('.file-item');
@@ -1859,9 +1897,10 @@
                 buttons.forEach(btn => {
                     btn.disabled = true;
                     if (btn.dataset.fileAction === 'delete') {
-                        btn.innerHTML = '<i data-feather="loader" class="w-4 h-4 animate-spin"></i>';
+                        btn.innerHTML = '<i data-feather="loader" aria-hidden="true" class="w-4 h-4 animate-spin"></i>';
                     }
                 });
+                refreshIcons();
             }
 
             try {
@@ -1870,11 +1909,11 @@
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({
                         folder: folder,
-                        fileName: fileName
+                        fileNames: [fileName]
                     })
                 });
 
-                if (response.ok) {
+                if (response.ok && response.status !== 207) {
                     showToast('File deleted successfully');
                     loadCurrentFolder();
                 } else {
@@ -1890,7 +1929,7 @@
                     buttons.forEach(btn => {
                         btn.disabled = false;
                         if (btn.dataset.fileAction === 'delete') {
-                            btn.innerHTML = '<i data-feather="trash-2" class="w-4 h-4"></i>';
+                            btn.innerHTML = '<i data-feather="trash-2" aria-hidden="true" class="w-4 h-4"></i>';
                         }
                     });
                     refreshIcons();

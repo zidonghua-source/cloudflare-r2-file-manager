@@ -62,6 +62,7 @@ app.post("/create-file", async (req, res) => {
 // 2. Delete a file inside a folder
 app.delete("/delete-file", async (req, res) => {
     const { folder, fileName, fileNames } = req.body;
+    const objectKey = (name) => folder === "" ? name : `${folder}/${name}`;
 
     try {
         // Handle batch deletion
@@ -69,7 +70,7 @@ app.delete("/delete-file", async (req, res) => {
             const deleteParams = {
                 Bucket: BUCKET_NAME,
                 Delete: {
-                    Objects: fileNames.map((name) => ({ Key: `${folder}/${name}` }))
+                    Objects: fileNames.map((name) => ({ Key: objectKey(name) }))
                 }
             };
 
@@ -122,7 +123,7 @@ app.delete("/delete-file", async (req, res) => {
             // Delete single file - first check if it exists
             const headParams = {
                 Bucket: BUCKET_NAME,
-                Key: `${folder}/${fileName}`
+                Key: objectKey(fileName)
             };
 
             try {
@@ -137,7 +138,7 @@ app.delete("/delete-file", async (req, res) => {
 
             const params = {
                 Bucket: BUCKET_NAME,
-                Key: `${folder}/${fileName}`
+                Key: objectKey(fileName)
             };
 
             const command = new DeleteObjectCommand(params);
