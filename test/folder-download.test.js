@@ -2,6 +2,7 @@ const assert = require("node:assert/strict");
 const { once } = require("node:events");
 const { Readable } = require("node:stream");
 const { before, after, test } = require("node:test");
+const { runInNewContext } = require("node:vm");
 const express = require("express");
 const { GetObjectCommand, ListObjectsV2Command } = require("@aws-sdk/client-s3");
 const registerFolderDownloads = require("../folder-download");
@@ -25,6 +26,15 @@ const etag = '"0123456789abcdef-2"';
 function manifest(query) {
     return fetch(`${baseUrl}/manifest?${new URLSearchParams(query)}`);
 }
+
+test("serves the ZIP worker library as an app asset", async () => {
+    const response = await fetch(`${baseUrl}/jszip.min.js`);
+    assert.equal(response.status, 200);
+    assert.match(response.headers.get("content-type"), /javascript/);
+    const worker = {};
+    runInNewContext(await response.text(), { self: worker, setTimeout, clearTimeout });
+    assert.equal(worker.JSZip.version, "3.10.2");
+});
 
 test("returns recursive file sizes and empty directory markers without fetching file content", async (t) => {
     const folder = "dự án";

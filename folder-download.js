@@ -29,7 +29,7 @@ module.exports = function registerFolderDownloads(app, s3, bucket) {
         res.sendFile(path.join(__dirname, "templates", "zip-worker.js"));
     });
     app.get("/folder-download/jszip.min.js", (_req, res) => {
-        res.sendFile(require.resolve("jszip/dist/jszip.min.js"));
+        res.sendFile(path.join(__dirname, "templates", "vendor", "jszip.min.js"));
     });
 
     app.get("/folder-download/manifest", async (req, res) => {
