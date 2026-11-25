@@ -105,6 +105,7 @@
 
         /* Better focus states */
         button:focus-visible,
+        a.action-btn:focus-visible,
         input:focus-visible {
             outline: 2px solid #374151;
             outline-offset: 2px;
@@ -205,7 +206,7 @@
             color: #94a3b8;
         }
 
-        html[data-theme="dark"] :is(button, input, textarea):focus-visible {
+        html[data-theme="dark"] :is(button, a.action-btn, input, textarea):focus-visible {
             outline: 2px solid #60a5fa;
             outline-offset: 2px;
         }
@@ -758,7 +759,7 @@
 
                 // Add click handler with shift-select support
                 div.onclick = (e) => {
-                    if (!e.target.closest('button')) {
+                    if (!e.target.closest('button, a, input')) {
                         handleFileClick(file, index, e);
                     }
                 };
@@ -776,26 +777,38 @@
 
                 div.innerHTML = `
                     <div class="flex items-center gap-2 flex-1 min-w-0">
-                        <input type="checkbox" ${isSelected ? 'checked' : ''} 
-                               onclick="event.stopPropagation(); handleFileClick('${file}', ${index}, event)" 
+                        <input type="checkbox" ${isSelected ? 'checked' : ''}
                                class="w-4 h-4 flex-shrink-0 text-gray-600 rounded focus:ring-2 focus:ring-gray-500 cursor-pointer">
-                        <i data-feather="${getFileIcon(fileExt)}" class="w-5 h-5 flex-shrink-0 text-gray-600"></i>
-                        <span class="text-gray-700 text-sm flex-1 min-w-0 truncate">${fileName}</span>
+                        <i data-feather="${icon}" class="w-5 h-5 flex-shrink-0 text-gray-600"></i>
+                        <span class="text-gray-700 text-sm flex-1 min-w-0 truncate"></span>
                     </div>
                     <div class="flex gap-1 flex-shrink-0">
-                        <button onclick="event.stopPropagation(); getFileUrl('${file}')" 
+                        <button data-file-action="get-url"
                                 class="action-btn text-gray-600 hover:text-gray-800 hover:bg-gray-50 rounded transition" 
                                 title="Get URL">
                             <i data-feather="link" class="w-4 h-4"></i>
                         </button>
-                        <button onclick="event.stopPropagation(); deleteFile('${file}')" 
+                        <a class="action-btn inline-flex items-center text-gray-600 hover:text-gray-800 hover:bg-gray-50 rounded transition"
+                           title="Download">
+                            <i data-feather="download" aria-hidden="true" class="w-4 h-4"></i>
+                        </a>
+                        <button data-file-action="delete"
                                 class="action-btn text-red-600 hover:text-red-800 hover:bg-red-50 rounded transition" 
                                 title="Delete">
                             <i data-feather="trash-2" class="w-4 h-4"></i>
                         </button>
                     </div>
                 `;
-                div.querySelector('span').title = fileName;
+                const name = div.querySelector('span');
+                name.textContent = fileName;
+                name.title = fileName;
+                div.querySelector('input').onclick = (event) => handleFileClick(file, index, event);
+                div.querySelector('[data-file-action="get-url"]').onclick = () => getFileUrl(file);
+                div.querySelector('[data-file-action="delete"]').onclick = () => deleteFile(file);
+
+                const downloadLink = div.querySelector('a');
+                downloadLink.href = `/download-file?${new URLSearchParams({ key: file })}`;
+                downloadLink.setAttribute('aria-label', `Download ${fileName}`);
                 filesList.appendChild(div);
             });
             updateSelectionUI();
@@ -1828,7 +1841,7 @@
                 const buttons = targetFileItem.querySelectorAll('button');
                 buttons.forEach(btn => {
                     btn.disabled = true;
-                    if (btn.onclick.toString().includes('deleteFile')) {
+                    if (btn.dataset.fileAction === 'delete') {
                         btn.innerHTML = '<i data-feather="loader" class="w-4 h-4 animate-spin"></i>';
                     }
                 });
@@ -1859,7 +1872,7 @@
                     const buttons = targetFileItem.querySelectorAll('button');
                     buttons.forEach(btn => {
                         btn.disabled = false;
-                        if (btn.onclick.toString().includes('deleteFile')) {
+                        if (btn.dataset.fileAction === 'delete') {
                             btn.innerHTML = '<i data-feather="trash-2" class="w-4 h-4"></i>';
                         }
                     });
@@ -1879,7 +1892,7 @@
             for (const item of fileItems) {
                 if (item.dataset.file === file) {
                     targetFileItem = item;
-                    urlButton = item.querySelector('button[onclick*="getFileUrl"]');
+                    urlButton = item.querySelector('[data-file-action="get-url"]');
                     break;
                 }
             }

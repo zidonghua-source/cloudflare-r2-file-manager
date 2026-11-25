@@ -452,6 +452,32 @@ app.get("/get-file-urls", async (req, res) => {
     }
 });
 
+app.get("/download-file", async (req, res) => {
+    const { key } = req.query;
+    if (typeof key !== "string" || !key || key.endsWith("/") || Buffer.byteLength(key, "utf8") > 1024) {
+        return res.status(400).send({ error: "A valid file key is required" });
+    }
+
+    const fileName = key.slice(key.lastIndexOf("/") + 1).replace(/[\x00-\x1f\x7f]/g, "_");
+    const fallback = fileName.replace(/[^\x20-\x7e]|["\\%]/g, "_");
+    const encodedName = encodeURIComponent(fileName).replace(/['()*]/g, (char) =>
+        `%${char.charCodeAt(0).toString(16).toUpperCase()}`
+    );
+
+    try {
+        const command = new GetObjectCommand({
+            Bucket: BUCKET_NAME,
+            Key: key,
+            ResponseContentDisposition: `attachment; filename="${fallback}"; filename*=UTF-8''${encodedName}`
+        });
+        const url = await getSignedUrl(s3, command, { expiresIn: 300 });
+        return res.set("Cache-Control", "no-store").redirect(url);
+    } catch (error) {
+        console.error("Failed to sign R2 download:", error.name);
+        return res.status(500).send({ error: "Failed to create download URL" });
+    }
+});
+
 // Start server
 const PORT = process.env.PORT || 3000;
 app.listen(PORT, () => {
