@@ -504,6 +504,22 @@
         </div>
     </div>
 
+    <dialog id="folder-download-dialog" aria-labelledby="folder-download-title" aria-describedby="folder-download-summary"
+        class="m-auto w-11/12 max-w-md rounded-lg bg-white p-5 text-gray-900 shadow-xl backdrop:bg-black/50">
+        <h2 id="folder-download-title" class="text-lg font-bold">Download folder</h2>
+        <p id="folder-download-name" class="mt-1 break-words text-sm text-gray-700"></p>
+        <p id="folder-download-summary" class="mt-3 text-sm text-gray-700" aria-live="polite"></p>
+        <progress id="folder-download-progress" aria-label="Folder download progress" max="100"
+            class="mt-3 h-2 w-full accent-gray-600" hidden></progress>
+        <p id="folder-download-status" role="status" class="mt-2 text-sm text-gray-600"></p>
+        <div class="mt-4 flex flex-wrap justify-end gap-2">
+            <button type="button" id="folder-download-cancel" autofocus
+                class="rounded px-3 py-2 text-sm text-gray-600 hover:bg-gray-100">Cancel</button>
+            <button type="button" id="folder-download-confirm" disabled
+                class="rounded bg-gray-600 px-3 py-2 text-sm text-white hover:bg-gray-700 disabled:opacity-50">Download ZIP</button>
+        </div>
+    </dialog>
+
     <script>
         let currentFolder = getFolderFromUrl();
         let renamingFolder = '';
@@ -704,27 +720,41 @@
             folders.sort(naturalSort);
 
             folders.forEach(folder => {
-                const folderName = folder.replace(/\/$/, '').split('/').pop();
+                const folderPath = folder.replace(/\/$/, '');
+                const folderName = folderPath.split('/').pop();
                 const div = document.createElement('div');
                 div.className = 'folder-item border-b border-gray-200 p-2 flex items-center justify-between gap-2 cursor-pointer';
+                div.dataset.folder = folderPath;
                 div.innerHTML = `
-                    <div class="flex items-center gap-2 flex-1 min-w-0" onclick="navigateToFolder('${folder.replace(/\/$/, '')}')">
+                    <button type="button" data-folder-action="open" class="flex items-center gap-2 flex-1 min-w-0 text-left">
                         <i data-feather="folder" class="w-5 h-5 flex-shrink-0 text-gray-600"></i>
-                        <span class="font-medium text-gray-900 text-sm flex-1 min-w-0 truncate">${folderName}</span>
-                    </div>
+                        <span class="font-medium text-gray-900 text-sm flex-1 min-w-0 truncate"></span>
+                    </button>
                     <div class="flex gap-1 flex-shrink-0">
-                        <button onclick="event.stopPropagation(); openRenameFolderModal('${folder.replace(/\/$/, '')}')" class="action-btn text-gray-600 hover:text-gray-800 hover:bg-gray-50 rounded transition" title="Rename">
+                        <button type="button" data-folder-action="rename" class="action-btn text-gray-600 hover:text-gray-800 hover:bg-gray-50 rounded transition" title="Rename">
                             <i data-feather="edit-2" class="w-4 h-4"></i>
                         </button>
-                        <button onclick="event.stopPropagation(); duplicateFolder('${folder.replace(/\/$/, '')}')" class="action-btn text-gray-600 hover:text-gray-800 hover:bg-gray-50 rounded transition" title="Duplicate">
+                        <button type="button" data-folder-action="duplicate" class="action-btn text-gray-600 hover:text-gray-800 hover:bg-gray-50 rounded transition" title="Duplicate">
                             <i data-feather="copy" class="w-4 h-4"></i>
                         </button>
-                        <button onclick="event.stopPropagation(); deleteFolder('${folder.replace(/\/$/, '')}')" class="action-btn text-red-600 hover:text-red-800 hover:bg-red-50 rounded transition" title="Delete">
+                        <button type="button" data-folder-action="download" class="action-btn text-gray-600 hover:text-gray-800 hover:bg-gray-50 rounded transition" title="Download folder">
+                            <i data-feather="download" aria-hidden="true" class="w-4 h-4"></i>
+                        </button>
+                        <button type="button" data-folder-action="delete" class="action-btn text-red-600 hover:text-red-800 hover:bg-red-50 rounded transition" title="Delete">
                             <i data-feather="trash-2" class="w-4 h-4"></i>
                         </button>
                     </div>
                 `;
-                div.querySelector('span').title = folderName;
+                const name = div.querySelector('span');
+                name.textContent = folderName;
+                name.title = folderName;
+                div.querySelector('[data-folder-action="open"]').onclick = () => navigateToFolder(folderPath);
+                div.querySelector('[data-folder-action="rename"]').onclick = () => openRenameFolderModal(folderPath);
+                div.querySelector('[data-folder-action="duplicate"]').onclick = () => duplicateFolder(folderPath);
+                div.querySelector('[data-folder-action="delete"]').onclick = () => deleteFolder(folderPath);
+                const download = div.querySelector('[data-folder-action="download"]');
+                download.setAttribute('aria-label', `Download folder ${folderName}`);
+                download.onclick = () => openFolderDownload(folderPath);
                 foldersList.appendChild(div);
             });
         }
@@ -909,6 +939,7 @@
 
         // Select all files (Ctrl+A)
         document.addEventListener('keydown', (e) => {
+            if (document.getElementById('folder-download-dialog').open) return;
             if ((e.ctrlKey || e.metaKey) && e.key === 'a' && !e.target.matches('input, textarea')) {
                 e.preventDefault();
                 selectAllFiles();
@@ -1705,21 +1736,14 @@
             if (!confirm(`Duplicate folder "${folderName}"?`)) return;
 
             // Find the folder item and disable its buttons
-            const folderItems = document.querySelectorAll('.folder-item');
-            let targetFolderItem = null;
-            for (const item of folderItems) {
-                const folderDiv = item.querySelector('div[onclick*="navigateToFolder"]');
-                if (folderDiv && folderDiv.onclick.toString().includes(folder.replace(/\/$/, ''))) {
-                    targetFolderItem = item;
-                    break;
-                }
-            }
+            const targetFolderItem = Array.from(document.querySelectorAll('.folder-item'))
+                .find(item => item.dataset.folder === folder);
 
             if (targetFolderItem) {
                 const buttons = targetFolderItem.querySelectorAll('button');
                 buttons.forEach(btn => {
                     btn.disabled = true;
-                    if (btn.onclick.toString().includes('duplicateFolder')) {
+                    if (btn.dataset.folderAction === 'duplicate') {
                         btn.innerHTML = '<i data-feather="loader" class="w-4 h-4 animate-spin"></i>';
                     }
                 });
@@ -1750,7 +1774,7 @@
                     const buttons = targetFolderItem.querySelectorAll('button');
                     buttons.forEach(btn => {
                         btn.disabled = false;
-                        if (btn.onclick.toString().includes('duplicateFolder')) {
+                        if (btn.dataset.folderAction === 'duplicate') {
                             btn.innerHTML = '<i data-feather="copy" class="w-4 h-4"></i>';
                         }
                     });
@@ -1766,21 +1790,14 @@
             if (!confirm(`Delete folder "${folderName}" and all its contents?`)) return;
 
             // Find the folder item and disable its buttons
-            const folderItems = document.querySelectorAll('.folder-item');
-            let targetFolderItem = null;
-            for (const item of folderItems) {
-                const folderDiv = item.querySelector('div[onclick*="navigateToFolder"]');
-                if (folderDiv && folderDiv.onclick.toString().includes(folder.replace(/\/$/, ''))) {
-                    targetFolderItem = item;
-                    break;
-                }
-            }
+            const targetFolderItem = Array.from(document.querySelectorAll('.folder-item'))
+                .find(item => item.dataset.folder === folder);
 
             if (targetFolderItem) {
                 const buttons = targetFolderItem.querySelectorAll('button');
                 buttons.forEach(btn => {
                     btn.disabled = true;
-                    if (btn.onclick.toString().includes('deleteFolder')) {
+                    if (btn.dataset.folderAction === 'delete') {
                         btn.innerHTML = '<i data-feather="loader" class="w-4 h-4 animate-spin"></i>';
                     }
                 });
@@ -1811,7 +1828,7 @@
                     const buttons = targetFolderItem.querySelectorAll('button');
                     buttons.forEach(btn => {
                         btn.disabled = false;
-                        if (btn.onclick.toString().includes('deleteFolder')) {
+                        if (btn.dataset.folderAction === 'delete') {
                             btn.innerHTML = '<i data-feather="trash-2" class="w-4 h-4"></i>';
                         }
                     });
@@ -1943,6 +1960,7 @@
             setTimeout(refreshIcons, 10);
         };
     </script>
+    <script src="/folder-download/client.js"></script>
 </body>
 
 </html>
